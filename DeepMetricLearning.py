@@ -6,6 +6,21 @@ import PIL
 from tqdm import tqdm
 from dlcliche.image import *
 
+#多分必要なライブラリ
+import numpy as np
+
+import matplotlib.pyplot as plt
+from sklearn.manifold import TSNE
+from sklearn.decomposition import PCA
+from mpl_toolkits.mplot3d import axes3d
+#%matplotlib notebook
+
+#arcfaceでの学習
+from metrics import *
+
+#学習回数
+TRAING_NUM = 5
+
 
 def prepare_full_MNIST_databunch(data_folder, tfms):
     """
@@ -83,13 +98,6 @@ def get_embeddings(embedding_model, data_loader, label_catcher=None, return_y=Fa
     return embs
 
 # T-sneで根拠を可視化
-import matplotlib.pyplot as plt
-from sklearn.manifold import TSNE
-from sklearn.decomposition import PCA
-from mpl_toolkits.mplot3d import axes3d
-#%matplotlib notebook
-
-
 def show_2D_tSNE(latent_vecs, target, title='t-SNE viz'):
     latent_vecs = latent_vecs
     latent_vecs_reduced = TSNE(n_components=2, random_state=0).fit_transform(latent_vecs)
@@ -141,16 +149,15 @@ def learner_conventional(train_data):
     learn = cnn_learner(train_data, models.resnet18, metrics=accuracy)
     learn.fit(1)
     learn.unfreeze()
-    learn.fit(3)
+    learn.fit(TRAING_NUM)
     return learn
 
 learn = learner_conventional(data)
 embs = get_embeddings(body_feature_model(learn.model), data.valid_dl)
 show_2D_tSNE(embs, [int(y) for y in data.valid_ds.y], title='Simply trained　CNN (t-SNE)')
+show_3D_tSNE(embs,[int(y) for y in data.valid_ds.y],title='Simply trained　CNN (t-SNE) 3D')
 
 #arcfaceでの学習
-from metrics import *
-
 class LabelCatcher(LearnerCallback):
     last_labels = None
 
@@ -181,9 +188,10 @@ def learner_ArcFace(train_data):
     learn.callback_fns.append(partial(LabelCatcher))
     learn.fit(1)
     learn.unfreeze()
-    learn.fit(5)
+    learn.fit(TRAING_NUM)
     return learn
 
 learn = learner_ArcFace(data)
 embs = get_embeddings(body_feature_model(learn.model), data.valid_dl)
 show_2D_tSNE(embs, [int(y) for y in data.valid_ds.y], title='ArcFace (t-SNE)')
+show_3D_tSNE(embs,[int(y) for y in data.valid_ds.y],title='ArcFace (t-SNE) 3D')
