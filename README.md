@@ -4,5 +4,3 @@
 conda install -c fastchan fastai
 
 pip install dl-cliche
-
-pullできる？

@@ -20,6 +20,12 @@ from metrics import *
 
 #学習回数
 TRAING_NUM = 5
+#T-sneによる可視化の保存場所
+FILE_NAME = "./image/"
+#modelの保存場所
+MODEL_PATH = "./model/"
+MODEL_NAME_CNN = "cnn_model"
+MODEL_NAME_CNN_ARCFACE = "cnn_arcface_model"
 
 
 def prepare_full_MNIST_databunch(data_folder, tfms):
@@ -105,6 +111,7 @@ def show_2D_tSNE(latent_vecs, target, title='t-SNE viz'):
                 c=target, cmap='jet')
     plt.colorbar()
     plt.show()
+    plt.savefig(FILE_NAME+title+".jpg")
 
 
 def show_3D_tSNE(latent_vecs, target, title='3D t-SNE viz'):
@@ -116,6 +123,7 @@ def show_3D_tSNE(latent_vecs, target, title='3D t-SNE viz'):
     ax.set_title(title)
     plt.colorbar(scatter)
     plt.show()
+    plt.savefig(FILE_NAME+title+".jpg")
 
 
 def show_as_PCA(latent_vecs, target, title='PCA viz'):
@@ -153,6 +161,8 @@ def learner_conventional(train_data):
     return learn
 
 learn = learner_conventional(data)
+#modelの保存
+learn.save(MODEL_PATH+MODEL_NAME_CNN)
 embs = get_embeddings(body_feature_model(learn.model), data.valid_dl)
 show_2D_tSNE(embs, [int(y) for y in data.valid_ds.y], title='Simply trained　CNN (t-SNE)')
 show_3D_tSNE(embs,[int(y) for y in data.valid_ds.y],title='Simply trained　CNN (t-SNE) 3D')
@@ -192,6 +202,8 @@ def learner_ArcFace(train_data):
     return learn
 
 learn = learner_ArcFace(data)
+#modelの保存
+learn.save(MODEL_PATH+MODEL_NAME_CNN_ARCFACE)
 embs = get_embeddings(body_feature_model(learn.model), data.valid_dl)
 show_2D_tSNE(embs, [int(y) for y in data.valid_ds.y], title='ArcFace (t-SNE)')
 show_3D_tSNE(embs,[int(y) for y in data.valid_ds.y],title='ArcFace (t-SNE) 3D')
