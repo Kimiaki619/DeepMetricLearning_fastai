@@ -99,6 +99,32 @@ def show_3D_tSNE(latent_vecs, target, title='3D t-SNE viz'):
     plt.show()
     plt.savefig(FILE_NAME+title+".jpg")
 
+def classify_images():
+    print('Classify images...')
+
+    # Get labels and images
+    df = pd.read_csv(DATA_DIR+IMAGE_LABEL_FILE)
+    labels = list(set(df['label'].values))
+    
+    # Delete images which were clustered before
+    if os.path.exists(CLUSTERED_IMAGES_DIR):
+        shutil.rmtree(CLUSTERED_IMAGES_DIR)
+
+    for label in labels:
+        print('Copy and paste label %s images.' % label)
+
+        # Make directories named each label
+        new_dir = CLUSTERED_IMAGES_DIR + str(label) + '/'
+        if not os.path.exists(new_dir):
+            os.makedirs(new_dir)
+
+        # Copy images to the directories
+        clustered_images = df[df['label']==label]['image'].values
+        for ci in clustered_images:
+            src = TARGET_IMAGES_DIR + ci
+            dst = CLUSTERED_IMAGES_DIR + str(label) + '/' + ci
+            shutil.copyfile(src, dst)
+
 #ここから
 #dataを入れる。
 DATA = Path('data')
@@ -113,6 +139,14 @@ learn = learner_conventional(data)
 #modelの保存
 learn.load(MODEL_PATH+MODEL_NAME_CNN)
 embs = get_embeddings(body_feature_model(learn.model), data.valid_dl)
+
+#ここがうまくいくかどうか
+kmeans = KMeans(n_clusters=7,random_state=0).fit(embs)
+print("クラスタリングできた？")
+df = pd.DataFrame({'image': images, 'label': kmeans.labels_})
+df.to_csv(DATA_DIR+IMAGE_LABEL_FILE, index=False)
+classify_images()
+
 show_2D_tSNE(embs, [int(y) for y in data.valid_ds.y], title='Simply trained　CNN (t-SNE)')
 show_3D_tSNE(embs,[int(y) for y in data.valid_ds.y],title='Simply trained　CNN (t-SNE) 3D')
 
@@ -145,9 +179,6 @@ def learner_ArcFace(train_data):
     learn = cnn_learner(train_data, models.resnet18, metrics=accuracy)
     learn.model = XFaceNet(learn.model, train_data, ArcMarginProduct, m=0.5)
     learn.callback_fns.append(partial(LabelCatcher))
-    learn.fit(1)
-    learn.unfreeze()
-    learn.fit(TRAING_NUM)
     return learn
 
 learn = learner_ArcFace(data)
