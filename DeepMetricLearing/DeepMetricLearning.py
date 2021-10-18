@@ -1,3 +1,6 @@
+#動いたら、vgg19に変えて
+
+from fastai import *
 from fastai.vision import *
 from torchvision import datasets, transforms
 from torch import nn
