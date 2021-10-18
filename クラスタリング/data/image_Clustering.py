@@ -23,7 +23,6 @@ from mpl_toolkits.mplot3d import axes3d
 from metrics import *
 
 DATA_DIR = '../data/'
-VIDEOS_DIR = '../data/video/'                        # The place to put the video
 TARGET_IMAGES_DIR = '../data/images/target/'         # The place to put the images which you want to execute clustering
 CLUSTERED_IMAGES_DIR = '../data/images/clustered/'   # The place to put the images which are clustered
 IMAGE_LABEL_FILE ='image_label.csv'                  # Image name and its label
