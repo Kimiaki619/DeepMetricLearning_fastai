@@ -30,8 +30,8 @@ import shutil
 from metrics import *
 
 DATA_DIR = '../data/'
-TARGET_IMAGES_DIR = '../data/images/target/'         # The place to put the images which you want to execute clustering
-CLUSTERED_IMAGES_DIR = '../data/images/clustered/'   # The place to put the images which are clustered
+TARGET_IMAGES_DIR = '/home/cvmlab/Desktop/DeepMetricLearning_fastai-main/'         # The place to put the images which you want to execute clustering
+CLUSTERED_IMAGES_DIR = '/home/cvmlab/Desktop/DeepMetricLearning_fastai-main/'   # The place to put the images which are clustered
 IMAGE_LABEL_FILE ='image_label.csv'                  # Image name and its label
 #modelの保存場所
 MODEL_PATH = "../model/"
@@ -69,6 +69,7 @@ def get_embeddings(embedding_model, data_loader, label_catcher=None, return_y=Fa
             out = embedding_model(X).cpu().detach().numpy()
             out = out.reshape((len(out), -1))
             embs.append(out)
+        y = y.detach().cpu().numpy()
         ys.append(y)
     # Putting all embeddings in shape (number of samples, length of one sample embeddings)
     embs = np.concatenate(embs) # Maybe in (10000, 10)
@@ -124,6 +125,44 @@ def classify_images():
             src = TARGET_IMAGES_DIR + ci
             dst = CLUSTERED_IMAGES_DIR + str(label) + '/' + ci
             shutil.copyfile(src, dst)
+def prepare_full_MNIST_databunch(data_folder, tfms):
+    """
+    Prepare dataset as images under:
+        data_folder/images/('train' or 'valid')/(class)
+    where filenames are:
+        img(class)_(count index).png
+    """
+    transform = transforms.Compose(
+    [transforms.ToTensor(),
+     transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
+     
+    train_ds = datasets.MNIST(data_folder, train=True, download=True,
+                        transform=transforms.Compose([
+                            transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+                        ]))
+    valid_ds = datasets.MNIST(data_folder, train=False,
+                            transform=transforms.Compose([
+                                transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+                            ]))
+
+    def have_already_been_done():
+        return (data_folder/'images').is_dir()
+    def build_images_folder(data_root, X, labels, dest_folder):
+        images = data_folder/'images'
+        for i, (x, y) in tqdm.tqdm(enumerate(zip(X, labels))):
+            folder = images/dest_folder/f'{y}'
+            ensure_folder(folder)
+            x = x.numpy()
+            image = np.stack([x for ch in range(3)], axis=-1)
+            PIL.Image.fromarray(image).save(folder/f'img{y}_{i:06d}.jpg')
+
+    if not have_already_been_done():
+        build_images_folder(data_root=DATA, X=train_ds.train_data,
+                            labels=train_ds.train_labels, dest_folder='train')
+        build_images_folder(data_root=DATA, X=valid_ds.test_data, 
+                            labels=valid_ds.test_labels, dest_folder='valid')
+
+    return ImageDataBunch.from_folder(data_folder/'images', ds_tfms=tfms,bs=16)
 
 #ここから
 #dataを入れる。
@@ -132,18 +171,21 @@ data = prepare_full_MNIST_databunch(DATA, get_transforms(do_flip=False))
 
 #cnn 普通のcnnでの学習。比較対象
 def learner_conventional(train_data):
-    learn = cnn_learner(train_data, models.resnet18, metrics=accuracy)
+    learn = cnn_learner(train_data, models.vgg19_bn, metrics=accuracy)
     return learn
 
 learn = learner_conventional(data)
 #modelの保存
-learn.load(MODEL_PATH+MODEL_NAME_CNN)
+learn.load(MODEL_NAME_CNN)
 embs = get_embeddings(body_feature_model(learn.model), data.valid_dl)
 
 #ここがうまくいくかどうか
 kmeans = KMeans(n_clusters=7,random_state=0).fit(embs)
 print("クラスタリングできた？")
-df = pd.DataFrame({'image': images, 'label': kmeans.labels_})
+print(data.valid_dl.y)
+print("______________________")
+print(kmeans.labels_)
+df = pd.DataFrame({'image': data.valid_dl.y, 'label': kmeans.labels_})
 df.to_csv(DATA_DIR+IMAGE_LABEL_FILE, index=False)
 classify_images()
 
@@ -176,7 +218,7 @@ class XFaceNet(nn.Module):
 
 
 def learner_ArcFace(train_data):
-    learn = cnn_learner(train_data, models.resnet18, metrics=accuracy)
+    learn = cnn_learner(train_data, models.vgg19_bn, metrics=accuracy)
     learn.model = XFaceNet(learn.model, train_data, ArcMarginProduct, m=0.5)
     learn.callback_fns.append(partial(LabelCatcher))
     return learn

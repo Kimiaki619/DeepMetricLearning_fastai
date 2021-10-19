@@ -2,6 +2,7 @@
 from fastai import *
 from fastai.vision import *
 from torchvision import datasets, transforms
+import torchvision
 from torch import nn
 import torch
 import PIL
@@ -23,12 +24,14 @@ from metrics import *
 #学習回数
 TRAING_NUM = 5
 #T-sneによる可視化の保存場所
-FILE_NAME = "../image/"
+FILE_NAME = "/home/cvmlab/Desktop/DeepMetricLearning_fastai-main/image/"
 #modelの保存場所
-MODEL_PATH = "../model/"
+MODEL_PATH = "/home/cvmlab/Desktop/DeepMetricLearning_fastai-main/model/"
 MODEL_NAME_CNN = "cnn_model"
 MODEL_NAME_CNN_ARCFACE = "cnn_arcface_model"
 
+device = torch.device("cuda" if torch.cuda.is_available else "cpu")
+print(device)
 
 def prepare_full_MNIST_databunch(data_folder, tfms):
     """
@@ -37,13 +40,17 @@ def prepare_full_MNIST_databunch(data_folder, tfms):
     where filenames are:
         img(class)_(count index).png
     """
+    transform = transforms.Compose(
+    [transforms.ToTensor(),
+     transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
+     
     train_ds = datasets.MNIST(data_folder, train=True, download=True,
                         transform=transforms.Compose([
-                            transforms.Normalize((0.1307,), (0.3081,))
+                            transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
                         ]))
     valid_ds = datasets.MNIST(data_folder, train=False,
                             transform=transforms.Compose([
-                                transforms.Normalize((0.1307,), (0.3081,))
+                                transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
                             ]))
 
     def have_already_been_done():
@@ -55,7 +62,7 @@ def prepare_full_MNIST_databunch(data_folder, tfms):
             ensure_folder(folder)
             x = x.numpy()
             image = np.stack([x for ch in range(3)], axis=-1)
-            PIL.Image.fromarray(image).save(folder/f'img{y}_{i:06d}.png')
+            PIL.Image.fromarray(image).save(folder/f'img{y}_{i:06d}.jpg')
 
     if not have_already_been_done():
         build_images_folder(data_root=DATA, X=train_ds.train_data,
@@ -63,7 +70,7 @@ def prepare_full_MNIST_databunch(data_folder, tfms):
         build_images_folder(data_root=DATA, X=valid_ds.test_data, 
                             labels=valid_ds.test_labels, dest_folder='valid')
 
-    return ImageDataBunch.from_folder(data_folder/'images', ds_tfms=tfms)
+    return ImageDataBunch.from_folder(data_folder/'images', ds_tfms=tfms,bs=16)
 
 
 def body_feature_model(model):
@@ -97,9 +104,10 @@ def get_embeddings(embedding_model, data_loader, label_catcher=None, return_y=Fa
             out = embedding_model(X).cpu().detach().numpy()
             out = out.reshape((len(out), -1))
             embs.append(out)
+        y = y.detach().cpu().numpy()
         ys.append(y)
     # Putting all embeddings in shape (number of samples, length of one sample embeddings)
-    embs = np.concatenate(embs) # Maybe in (10000, 10)
+    embs = np.concatenate(embs)# Maybe in (10000, 10)
     ys   = np.concatenate(ys)
     if return_y:
         return embs, ys
@@ -112,8 +120,8 @@ def show_2D_tSNE(latent_vecs, target, title='t-SNE viz'):
     plt.scatter(latent_vecs_reduced[:, 0], latent_vecs_reduced[:, 1],
                 c=target, cmap='jet')
     plt.colorbar()
-    plt.show()
     plt.savefig(FILE_NAME+title+".jpg")
+    #plt.show()
 
 
 def show_3D_tSNE(latent_vecs, target, title='3D t-SNE viz'):
@@ -124,8 +132,8 @@ def show_3D_tSNE(latent_vecs, target, title='3D t-SNE viz'):
     scatter = ax.scatter3D(tsne[:, 0], tsne[:, 1], tsne[:, 2], c=target, cmap='jet')
     ax.set_title(title)
     plt.colorbar(scatter)
-    plt.show()
     plt.savefig(FILE_NAME+title+".jpg")
+    #plt.show()
 
 
 def show_as_PCA(latent_vecs, target, title='PCA viz'):
@@ -138,7 +146,7 @@ def show_as_PCA(latent_vecs, target, title='PCA viz'):
     plt.show()
 
 #dataを入れる。
-DATA = Path('data')
+DATA = Path('/home/cvmlab/Desktop/DeepMetricLearning_fastai-main/DeepMetricLearing/data')
 data = prepare_full_MNIST_databunch(DATA, get_transforms(do_flip=False))
 
 #まず可視化、何も使わずに可視化を行なっている。
@@ -146,17 +154,17 @@ raw_x = np.array([a.data.numpy() for a in data.valid_ds.x])
 raw_y = np.array([int(y.obj) for y in data.valid_ds.y])
 raw_x = raw_x.reshape((len(raw_x), -1))
 
-if False: # for saving time
-    LIMIT = 1000
-    chosen_idxes = np.random.choice(list(range(len(raw_x))), LIMIT)
-    raw_x = raw_x[chosen_idxes]
-    raw_y = raw_y[chosen_idxes]
+# if False: # for saving time
+#     LIMIT = 1000
+#     chosen_idxes = np.random.choice(list(range(len(raw_x))), LIMIT)
+#     raw_x = raw_x[chosen_idxes]
+#     raw_y = raw_y[chosen_idxes]
 
-show_2D_tSNE(raw_x, raw_y, 'Raw sample distributions (t-SNE)')
+# show_2D_tSNE(raw_x, raw_y, 'Raw sample distributions (t-SNE)')
 
 #cnn 普通のcnnでの学習。比較対象
 def learner_conventional(train_data):
-    learn = cnn_learner(train_data, models.resnet18, metrics=accuracy)
+    learn = cnn_learner(train_data, models.vgg19_bn, metrics=accuracy)
     learn.fit(1)
     learn.unfreeze()
     learn.fit(TRAING_NUM)
@@ -195,7 +203,7 @@ class XFaceNet(nn.Module):
 
 
 def learner_ArcFace(train_data):
-    learn = cnn_learner(train_data, models.resnet18, metrics=accuracy)
+    learn = cnn_learner(train_data, models.vgg19_bn, metrics=accuracy)
     learn.model = XFaceNet(learn.model, train_data, ArcMarginProduct, m=0.5)
     learn.callback_fns.append(partial(LabelCatcher))
     learn.fit(1)
